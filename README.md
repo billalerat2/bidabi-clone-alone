@@ -1,46 +1,72 @@
-# bidabi-clone-adapt-create
 # BIDABI : Clone → Adapt → Create
 
-Dépôt pédagogique du cours **Big Data and Business Intelligence (BIDABI)**.  
-Ce projet a pour objectif d’initier les étudiants au travail avec du code open‑source, à l’adaptation de projets existants et à la création de leur propre jeu de données d’images.
+Classification d'images alimentaires (ResNet‑18) avec dataset OpenFoodFacts versionné via **DVC**.
 
-## 🎯 Objectif du dépôt
-Ce dépôt sert de **plateforme d’apprentissage** où les étudiants réalisent un cycle complet de travail en data et en machine learning :
+## Pipeline
 
-- cloner un projet open‑source depuis GitHub
-- analyser sa structure, ses dépendances et son fonctionnement
-- adapter le code à un nouveau contexte
-- créer un jeu de données d’images personnalisé
-- intégrer ce jeu de données dans un pipeline ML existant
+1. **Scraping** ([src/asyscrapper.py](src/asyscrapper.py)) — téléchargement d'images OpenFoodFacts par catégorie.
+2. **Entraînement** ([src/classificator.py](src/classificator.py)) — ResNet‑18 pré‑entraîné, full fine‑tuning + MixUp, split 60/20/20.
+3. **Évaluation** — matrice de confusion, ROC, t‑SNE, accuracy par classe → figures dans [reports/](reports/).
 
-L’objectif est de reproduire des situations réelles rencontrées par les ingénieurs data et ML lorsqu’ils doivent réutiliser et modifier du code provenant d’autres développeurs.
+## Dataset
 
-## 🎓 Public visé
-Ce projet est destiné aux étudiants du cours **BIDABI**, notamment ceux qui s’intéressent à :
+Versionné par DVC via [data/raw.dvc](data/raw.dvc).
 
-- l’apprentissage automatique
-- l’ingénierie des données
-- la reproductibilité des expériences
-- l’utilisation de GitHub et des projets open‑source
+- **Classes** : `breads`, `chocolates`, `sugar`
+- **Images** : 366 (~180 / classe)
+- **Hash** : `abe7f674721bab3739a3c2b5adfa2388`
 
-## 🧩 Contenu du dépôt
-Le dépôt inclura :
+## Modèle
 
-- des exemples de code à analyser et adapter
-- un modèle de structure pour le jeu de données
-- des consignes pour les travaux pratiques
-- des instructions pour exécuter et modifier le projet
+Versionné par DVC via [models.dvc](models.dvc).
 
-## 🛠️ Compétences développées
-Les étudiants apprendront à :
+- **Fichier** : `models/best_model_resnet18_finetuned.pth`
+- **Architecture** : ResNet‑18 + `Dropout(0.4) → Linear`
+- **Hash** : `f73138e2b96e95ffd76f6e1e0b5832dc`
 
-- lire et comprendre du code écrit par d’autres
-- manipuler des dépôts GitHub
-- concevoir et organiser un jeu de données d’images
-- intégrer des données dans un pipeline ML
-- documenter leur travail de manière claire et reproductible
+## Prérequis
 
-## 📄 Licence et usage
-Ce dépôt est destiné **exclusivement à des fins pédagogiques** dans le cadre du cours BIDABI.  
-Le code et les ressources peuvent être simplifiés ou modifiés pour faciliter l’apprentissage.
+- **Python 3.11+**
+- **Git** + **DVC 3.x**
 
+Dépendances ([requirements.txt](requirements.txt)) :
+
+```
+torch==2.2.2
+torchvision==0.17.2
+dvc==3.67.1
+scikit_learn==1.8.0
+numpy==1.26.4
+matplotlib==3.10.8
+seaborn==0.13.2
+Requests==2.33.1
+aiohttp==3.13.5
+urllib3==2.6.3
+```
+
+## Reproduire l'entraînement
+
+```bash
+# 1. Cloner
+git clone <url-du-depot>
+cd bidabi-clone-alone
+
+# 2. Environnement
+python -m venv .venv
+source .venv/bin/activate        # Windows : .venv\Scripts\activate
+pip install -r requirements.txt
+
+# 3. Récupérer dataset + modèle via DVC
+dvc pull
+
+# 4. Lancer l'entraînement
+python src/classificator.py
+```
+
+Le script entraîne ResNet‑18, sauvegarde le meilleur modèle dans `best_model_resnet18_finetuned.pth` et génère les figures dans `reports/`.
+
+Hyperparamètres par défaut : `image=256×256`, `batch=32`, `epochs=7`, `lr=1e-5`, `seed=42`.
+
+## Licence
+
+Dépôt pédagogique — voir [LICENSE](LICENSE).
