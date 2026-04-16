@@ -12,13 +12,26 @@ import os
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-BASE_URL = "https://world.openfoodfacts.org/category/{category}.json"
+BASE_URL = "https://world.openfoodfacts.org/api/v2/search"
 HEADERS = {"User-Agent": "MyAwesomeApp/1.0"}
+PRODUCT_FIELDS = (
+    "code,product_name,categories_tags,ingredients_text,"
+    "image_url,image_front_url,image_small_url,image_thumb_url"
+)
 
 TARGET_COUNT = 180
 PAGE_SIZE = 100
 MAX_PAGES = 50
-CATEGORY = "champagnes"
+
+OUTPUT_ROOT = os.path.join("data", "raw")
+IMAGES_ROOT = os.path.join(OUTPUT_ROOT, "images")
+
+CATEGORIES = [
+    "sugar",
+    "chocolates",
+    "breads",
+    "cheeses",
+]
 
 
 # --- Session with retry ---
@@ -65,21 +78,31 @@ def fetch_page(category, page, page_size):
     list
         List of product dictionaries.
     """
-    url = BASE_URL.format(category=category)
-    params = {"page": page, "page_size": page_size, "json": 1}
+    params = {
+        "categories_tags": category,
+        "page": page,
+        "page_size": page_size,
+        "fields": PRODUCT_FIELDS,
+    }
 
     try:
         response = SESSION.get(
-            url,
+            BASE_URL,
             params=params,
             headers=HEADERS,
             timeout=(10, 30)
         )
         response.raise_for_status()
+        if "application/json" not in response.headers.get("content-type", ""):
+            raise RuntimeError(
+                f"API returned non-JSON (likely down). "
+                f"status={response.status_code}, "
+                f"content-type={response.headers.get('content-type')}"
+            )
         return response.json().get("products", [])
     except Exception as error:
-        print(f"⚠ Erreur API sur la page {page} :", error)
-        return []
+        print(f"⚠ Erreur API sur la page {page} :", error, flush=True)
+        raise
 
 
 def get_best_image(product):
@@ -118,10 +141,12 @@ def is_valid_product(product):
     bool
         True if product is valid and has an image.
     """
-    required_fields = ["_id", "product_name", "categories_tags"]
-    for field in required_fields:
-        if not product.get(field):
-            return False
+    if not (product.get("code") or product.get("_id")):
+        return False
+    if not product.get("product_name"):
+        return False
+    if not product.get("categories_tags"):
+        return False
     return bool(get_best_image(product))
 
 
@@ -140,7 +165,7 @@ def extract_product_info(product):
         Extracted fields: id, name, categories, ingredients, image_url.
     """
     return [
-        product.get("_id"),
+        product.get("code") or product.get("_id"),
         product.get("product_name"),
         ", ".join(product.get("categories_tags", [])),
         product.get("ingredients_text", ""),
@@ -203,23 +228,28 @@ def download_image(image_url, image_id, folder="images"):
         print(f"⚠ Impossible de télécharger l'image {image_url} :", error)
 
 
-def main():
+def scrape_category(category):
     """
-    Main scraping loop:
-    - fetches pages of products
-    - filters valid entries
-    - downloads images
-    - saves metadata to CSV
+    Scrapes one category: downloads images into data/raw/images/<category>/
+    and writes a per-category metadata CSV.
+
+    Parameters
+    ----------
+    category : str
+        OpenFoodFacts category slug (e.g. "sugar", "chocolates").
     """
+    category_images_dir = os.path.join(IMAGES_ROOT, category)
+    os.makedirs(category_images_dir, exist_ok=True)
+
     valid_products = []
     page = 1
 
     while len(valid_products) < TARGET_COUNT and page <= MAX_PAGES:
-        print(f"→ Téléchargement page {page}…")
+        print(f"[{category}] → page {page}…")
 
-        products = fetch_page(CATEGORY, page, PAGE_SIZE)
+        products = fetch_page(category, page, PAGE_SIZE)
         if not products:
-            print("Aucun produit trouvé sur cette page.")
+            print(f"[{category}] Aucun produit trouvé sur cette page.")
             break
 
         for product in products:
@@ -229,7 +259,9 @@ def main():
 
                 image_url = info[-1]
                 image_id = info[0]
-                download_image(image_url, image_id)
+                download_image(
+                    image_url, image_id, folder=category_images_dir
+                )
 
             if len(valid_products) == TARGET_COUNT:
                 break
@@ -237,13 +269,35 @@ def main():
         page += 1
         time.sleep(0.3)
 
-    output_file = f"{CATEGORY}_{TARGET_COUNT}.csv"
+    output_file = os.path.join(
+        OUTPUT_ROOT, f"metadata_{category}_{len(valid_products)}.csv"
+    )
     save_to_csv(output_file, valid_products)
 
     print(
-        f"✔ Fichier {output_file} créé. "
-        f"Produits valides collectés : {len(valid_products)}"
+        f"[{category}] ✔ {output_file} créé. "
+        f"Produits valides : {len(valid_products)}"
     )
+
+
+def main():
+    """
+    Scrapes every category in CATEGORIES and organizes outputs as:
+        data/raw/images/<category>/<id>.jpg
+        data/raw/metadata_<category>_<n>.csv
+
+    A failure on one category (e.g. transient API rate-limit) does not
+    abort the whole run — the next category is attempted.
+    """
+    os.makedirs(IMAGES_ROOT, exist_ok=True)
+    for category in CATEGORIES:
+        try:
+            scrape_category(category)
+        except Exception as error:
+            print(
+                f"[{category}] ✗ aborted: {error}. Skipping to next.",
+                flush=True,
+            )
 
 
 if __name__ == "__main__":
