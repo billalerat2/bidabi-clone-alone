@@ -15,7 +15,20 @@ from torchvision import datasets, transforms
 from torchvision.models import resnet18
 from torch.utils.data import DataLoader, random_split
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+REPORTS_DIR = "reports"
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+
+def save_fig(name):
+    """Save current matplotlib figure to reports/<name>.png and close it."""
+    path = os.path.join(REPORTS_DIR, f"{name}.png")
+    plt.savefig(path, bbox_inches="tight", dpi=120)
+    plt.close()
+    print(f"  → figure saved: {path}")
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
@@ -58,7 +71,7 @@ H = 256
 W = 256
 BATCH_SIZE = 32
 DATA_DIR = "data/raw/images"
-NUM_EPOCHS = 20
+NUM_EPOCHS = 7
 PATIENCE = 3
 
 # --- Transformations ---
@@ -94,28 +107,37 @@ test_transform = transforms.Compose([
     )
 ])
 
-# --- Chargement du dataset ---
-dataset = datasets.ImageFolder(
+# --- Chargement du dataset (deux fois pour appliquer des transforms différents
+#     au train vs val/test sans muter un dataset partagé via random_split) ---
+dataset_train_tfm = datasets.ImageFolder(
     root=DATA_DIR,
     transform=train_transform,
     is_valid_file=lambda p: p.lower().endswith((".jpg", ".jpeg", ".png"))
 )
+dataset_eval_tfm = datasets.ImageFolder(
+    root=DATA_DIR,
+    transform=test_transform,
+    is_valid_file=lambda p: p.lower().endswith((".jpg", ".jpeg", ".png"))
+)
 
+dataset = dataset_train_tfm  # alias pour le reste du script (classes, etc.)
 NUM_CLASSES = len(dataset.classes)
 print("Catégories détectées :", dataset.classes)
 
-# --- Split train/val/test ---
-total_len = len(dataset)
+# --- Split train/val/test (même seed sur les deux copies → splits identiques) ---
+total_len = len(dataset_train_tfm)
 train_size = int(0.6 * total_len)
 val_size = int(0.2 * total_len)
 test_size = total_len - train_size - val_size
 
-train_dataset, val_dataset, test_dataset = random_split(
-    dataset, [train_size, val_size, test_size]
+train_dataset, _, _ = random_split(
+    dataset_train_tfm, [train_size, val_size, test_size],
+    generator=torch.Generator().manual_seed(42),
 )
-
-val_dataset.dataset.transform = test_transform
-test_dataset.dataset.transform = test_transform
+_, val_dataset, test_dataset = random_split(
+    dataset_eval_tfm, [train_size, val_size, test_size],
+    generator=torch.Generator().manual_seed(42),
+)
 
 train_loader = DataLoader(
     train_dataset, batch_size=BATCH_SIZE, shuffle=True
@@ -318,7 +340,7 @@ plt.xlabel("Epoch")
 plt.ylabel("Loss")
 plt.title("Training & Validation Loss (ResNet18 full FT + MixUp)")
 plt.legend()
-plt.show()
+save_fig("loss_curve")
 
 plt.figure(figsize=(8, 5))
 plt.plot(val_accuracies, label="Validation Accuracy")
@@ -326,7 +348,7 @@ plt.xlabel("Epoch")
 plt.ylabel("Accuracy")
 plt.title("Validation Accuracy (ResNet18 full FT + MixUp)")
 plt.legend()
-plt.show()
+save_fig("val_accuracy")
 
 
 # --- Évaluation sur le test ---
@@ -413,7 +435,7 @@ def plot_confusion_matrix(cm, classes):
     plt.xlabel("Predicted")
     plt.ylabel("True")
     plt.title("Confusion Matrix (ResNet18 full FT + MixUp)")
-    plt.show()
+    save_fig("confusion_matrix")
 
 
 cm = confusion_matrix(all_labels, all_preds)
@@ -469,7 +491,7 @@ plt.bar(dataset.classes, per_class_acc)
 plt.ylabel("Accuracy")
 plt.title("Per-class Accuracy (ResNet18 full FT + MixUp)")
 plt.xticks(rotation=45)
-plt.show()
+save_fig("per_class_accuracy")
 
 
 # --- ROC curves (One-vs-Rest) ---
@@ -499,7 +521,7 @@ def plot_roc_curves(labels, probs, classes):
     plt.ylabel("True Positive Rate")
     plt.title("ROC Curves (ResNet18 full FT + MixUp)")
     plt.legend()
-    plt.show()
+    save_fig("roc_curves")
 
 
 plot_roc_curves(all_labels, all_probs, dataset.classes)
@@ -571,7 +593,7 @@ def compute_hardest_samples(model, loader, classes, top_k=12):
         plt.axis("off")
 
     plt.suptitle("Top Hardest Samples (Highest Loss)")
-    plt.show()
+    save_fig("hardest_samples")
 
 
 compute_hardest_samples(model, test_loader, dataset.classes)
@@ -635,7 +657,7 @@ for i, cls in enumerate(dataset.classes):
 
 plt.legend()
 plt.title("t-SNE Embedding Visualization")
-plt.show()
+save_fig("tsne_embedding")
 
 
 # --- UMAP ---
@@ -650,4 +672,4 @@ if umap_available:
 
     plt.legend()
     plt.title("UMAP Embedding Visualization")
-    plt.show()
+    save_fig("umap_embedding")

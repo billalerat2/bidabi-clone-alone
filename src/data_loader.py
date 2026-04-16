@@ -241,6 +241,17 @@ def scrape_category(category):
     category_images_dir = os.path.join(IMAGES_ROOT, category)
     os.makedirs(category_images_dir, exist_ok=True)
 
+    existing = len([
+        f for f in os.listdir(category_images_dir)
+        if not f.startswith(".")
+    ])
+    if existing >= TARGET_COUNT:
+        print(
+            f"[{category}] ⏭ already has {existing} images, skipping.",
+            flush=True,
+        )
+        return
+
     valid_products = []
     page = 1
 

@@ -213,3 +213,5 @@ data/raw/images/
 data/localstore/
 data/interim/
 data/processed/
+/models
+.venv-fresh/
