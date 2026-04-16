@@ -1,6 +1,36 @@
 # BIDABI : Clone → Adapt → Create
 
-Classification d'images alimentaires (ResNet‑18) avec dataset OpenFoodFacts versionné via **DVC**.
+## Description du projet
+
+Dépôt pédagogique du cours **Big Data and Business Intelligence (BIDABI)**.
+Ce projet met en œuvre un pipeline complet de **classification d'images alimentaires** à partir d'un dataset collecté sur **OpenFoodFacts** : scraping, versionnage des données et du modèle avec **DVC**, fine‑tuning d'un **ResNet‑18** (full FT + MixUp) et évaluation (matrice de confusion, ROC, t‑SNE…).
+L'objectif pédagogique : reproduire un cycle réel d'ingénieur ML — cloner, adapter un projet open‑source, créer son propre jeu de données et l'intégrer dans un pipeline reproductible.
+
+## Structure du dépôt
+
+```
+bidabi-clone-alone/
+├── data/
+│   ├── raw/                    # Dataset brut (versionné DVC)
+│   │   ├── images/             # Images organisées par classe
+│   │   │   ├── breads/
+│   │   │   ├── chocolates/
+│   │   │   └── sugar/
+│   │   └── metadata_*.csv      # Métadonnées OpenFoodFacts
+│   ├── raw.dvc                 # Pointeur DVC du dataset
+│   └── localstore/             # Remote DVC local
+├── models/
+│   └── best_model_resnet18_finetuned.pth   # Modèle (versionné DVC)
+├── models.dvc                  # Pointeur DVC du modèle
+├── reports/                    # Figures d'évaluation (loss, ROC, t‑SNE…)
+├── src/
+│   ├── asyscrapper.py          # Scraper OpenFoodFacts
+│   ├── data_loader.py          # Utilitaires de chargement
+│   └── classificator.py        # Pipeline d'entraînement & évaluation
+├── requirements.txt
+├── LICENSE
+└── README.md
+```
 
 ## Pipeline
 
